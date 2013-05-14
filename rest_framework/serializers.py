@@ -530,6 +530,7 @@ class ModelSerializerOptions(SerializerOptions):
         super(ModelSerializerOptions, self).__init__(meta)
         self.model = getattr(meta, 'model', None)
         self.read_only_fields = getattr(meta, 'read_only_fields', ())
+        self.find_reverse_rels = getattr(meta, 'find_reverse_rels', False)
 
 
 class ModelSerializer(Serializer):
@@ -623,7 +624,7 @@ class ModelSerializer(Serializer):
                 ret[model_field.name] = field
 
         # Deal with reverse relationships
-        if not self.opts.fields:
+        if not self.opts.fields and not self.opts.find_reverse_rels:
             reverse_rels = []
         else:
             # Reverse relationships are only included if they are explicitly
@@ -633,8 +634,9 @@ class ModelSerializer(Serializer):
 
         for relation in reverse_rels:
             accessor_name = relation.get_accessor_name()
-            if not self.opts.fields or accessor_name not in self.opts.fields:
-                continue
+            if not self.opts.find_reverse_rels:
+                if not self.opts.fields or accessor_name not in self.opts.fields:
+                    continue
             related_model = relation.model
             to_many = relation.field.rel.multiple
 
