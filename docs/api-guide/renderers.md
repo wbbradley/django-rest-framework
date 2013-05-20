@@ -67,13 +67,17 @@ If your API includes views that can serve both regular webpages and API response
 
 ## JSONRenderer
 
-Renders the request data into `JSON`.
+Renders the request data into `JSON` enforcing ASCII encoding
 
 The client may additionally include an `'indent'` media type parameter, in which case the returned `JSON` will be indented.  For example `Accept: application/json; indent=4`.
 
 **.media_type**: `application/json`
 
 **.format**: `'.json'`
+
+## UnicodeJSONRenderer
+
+Same as `JSONRenderer` but doesn't enforce ASCII encoding
 
 ## JSONPRenderer
 
@@ -273,6 +277,8 @@ Exceptions raised and handled by an HTML renderer will attempt to render using o
 * Render the HTTP status code and text, for example "404 Not Found".
 
 Templates will render with a `RequestContext` which includes the `status_code` and `details` keys.
+
+**Note**: If `DEBUG=True`, Django's standard traceback error page will be displayed instead of rendering the HTTP status code and text.
 
 ---
 

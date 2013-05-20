@@ -42,10 +42,17 @@ You can determine your currently installed version using `pip freeze`:
 
 ### Master
 
+* Bugfix: HyperlinkedIdentityField now uses `lookup_field` kwarg.
+
+### 2.3.2
+
+**Date**: 16th May 2013
+
 * Added SearchFilter
 * Added OrderingFilter
 * Added GenericViewSet
 * Bugfix: Multiple `@action` and `@link` methods now allowed on viewsets. 
+* Bugfix: Fix API Root view issue with DjangoModelPermissions
 
 ### 2.3.2
 

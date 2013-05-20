@@ -8,6 +8,7 @@ from __future__ import unicode_literals
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.urlresolvers import resolve, get_script_prefix, NoReverseMatch
 from django import forms
+from django.db.models.fields import BLANK_CHOICE_DASH
 from django.forms import widgets
 from django.forms.models import ModelChoiceIterator
 from django.utils.translation import ugettext_lazy as _
@@ -47,7 +48,7 @@ class RelatedField(WritableField):
                           DeprecationWarning, stacklevel=2)
             kwargs['required'] = not kwargs.pop('null')
 
-        self.queryset = kwargs.pop('queryset', None)
+        queryset = kwargs.pop('queryset', None)
         self.many = kwargs.pop('many', self.many)
         if self.many:
             self.widget = self.many_widget
@@ -55,6 +56,11 @@ class RelatedField(WritableField):
 
         kwargs['read_only'] = kwargs.pop('read_only', self.read_only)
         super(RelatedField, self).__init__(*args, **kwargs)
+
+        if not self.required:
+            self.empty_label = BLANK_CHOICE_DASH[0][1]
+
+        self.queryset = queryset
 
     def initialize(self, parent, field_name):
         super(RelatedField, self).initialize(parent, field_name)
@@ -221,12 +227,20 @@ class PrimaryKeyRelatedField(RelatedField):
     def field_to_native(self, obj, field_name):
         if self.many:
             # To-many relationship
-            try:
+
+            queryset = None
+            if not self.source:
                 # Prefer obj.serializable_value for performance reasons
-                queryset = obj.serializable_value(self.source or field_name)
-            except AttributeError:
+                try:
+                    queryset = obj.serializable_value(field_name)
+                except AttributeError:
+                    pass
+            if queryset is None:
                 # RelatedManager (reverse relationship)
-                queryset = getattr(obj, self.source or field_name)
+                source = self.source or field_name
+                queryset = obj
+                for component in source.split('.'):
+                    queryset = get_component(queryset, component)
 
             # Forward relationship
             return [self.to_native(item.pk) for item in queryset.all()]
@@ -434,7 +448,7 @@ class HyperlinkedRelatedField(RelatedField):
             raise Exception('Writable related fields must include a `queryset` argument')
 
         try:
-            http_prefix = value.startswith('http:') or value.startswith('https:')
+            http_prefix = value.startswith(('http:', 'https:'))
         except AttributeError:
             msg = self.error_messages['incorrect_type']
             raise ValidationError(msg % type(value).__name__)
@@ -465,10 +479,13 @@ class HyperlinkedIdentityField(Field):
     """
     Represents the instance, or a property on the instance, using hyperlinking.
     """
+    lookup_field = 'pk'
+    read_only = True
+
+    # These are all pending deprecation
     pk_url_kwarg = 'pk'
     slug_field = 'slug'
     slug_url_kwarg = None  # Defaults to same as `slug_field` unless overridden
-    read_only = True
 
     def __init__(self, *args, **kwargs):
         # TODO: Make view_name mandatory, and have the
@@ -476,6 +493,19 @@ class HyperlinkedIdentityField(Field):
         self.view_name = kwargs.pop('view_name', None)
         # Optionally the format of the target hyperlink may be specified
         self.format = kwargs.pop('format', None)
+
+        self.lookup_field = kwargs.pop('lookup_field', self.lookup_field)
+
+        # These are pending deprecation
+        if 'pk_url_kwarg' in kwargs:
+            msg = 'pk_url_kwarg is pending deprecation. Use lookup_field instead.'
+            warnings.warn(msg, PendingDeprecationWarning, stacklevel=2)
+        if 'slug_url_kwarg' in kwargs:
+            msg = 'slug_url_kwarg is pending deprecation. Use lookup_field instead.'
+            warnings.warn(msg, PendingDeprecationWarning, stacklevel=2)
+        if 'slug_field' in kwargs:
+            msg = 'slug_field is pending deprecation. Use lookup_field instead.'
+            warnings.warn(msg, PendingDeprecationWarning, stacklevel=2)
 
         self.slug_field = kwargs.pop('slug_field', self.slug_field)
         default_slug_kwarg = self.slug_url_kwarg or self.slug_field
@@ -488,7 +518,8 @@ class HyperlinkedIdentityField(Field):
         request = self.context.get('request', None)
         format = self.context.get('format', None)
         view_name = self.view_name or self.parent.opts.view_name
-        kwargs = {self.pk_url_kwarg: obj.pk}
+        lookup_field = getattr(obj, self.lookup_field)
+        kwargs = {self.lookup_field: lookup_field}
 
         if request is None:
             warnings.warn("Using `HyperlinkedIdentityField` without including the "
